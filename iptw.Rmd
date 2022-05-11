@@ -1,0 +1,140 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(tableone)
+library(WeightIt)
+library(survival)
+library(survey)
+colnames(fif.ip.t0.drug)
+colnames(dc.t0)
+```
+
+# IPTW table 1
+# analysis.R > for fif.ip.t0.drug.rds and ip.t0.nonop.RDS, aka table 1
+# 10 May 2022: population size is different
+
+```{r}
+tab1df = fif.ip.t0.drug_10May %>%
+  select(Sex, 
+         age,
+         Admission.from.Elderly.Home..Y.N., 
+         antiviral.course,
+         use.antiviral,
+         # comorbs 
+         ami:aids,
+         no.disease,
+         age.gp2
+         ) %>%
+  filter(age >= 60 | no.disease == 0) %>%
+  mutate(use.antiviral = factor(use.antiviral),
+         age.gp2 = factor(age.gp2)) %>%
+  select(-age, -no.disease) %>%
+  mutate_at(vars(ami:aids), ~replace_na(., 0)) %>%
+  # factor all variables
+  mutate_all(~as.factor(.))
+
+
+
+# check NA
+tab1df  %>% filter_all((any_vars(is.na(.))))  
+# check NA in sex and age
+tab1df  %>% filter_at(vars(c(1:5)), any_vars(is.na(.)))
+
+tab1 = CreateTableOne(data = tab1df, strata = "use.antiviral", test = T)
+print(tab1, smd = T)
+
+# weightit 
+col_removed = c("antiviral", "use.antiviral", "age", "msld",
+                                         # alias of treatment
+                                         "antiviral.course")
+x_factors = colnames(tab1df)
+x_factors = x_factors[! x_factors %in% col_removed]
+
+function_call<-paste0("weight.tab1 <- weightit(use.antiviral ~ ",paste(x_factors, collapse = "+"), 
+              ", data = tab1df, method = \"ps\", 
+              estimand = \"ATT\")"
+              )
+eval(parse(text = function_call))
+# lapply(tab1df, function(x) unique(x))
+
+# balance of weighting (optional)
+bal.tab(weight.tab1, un = T)
+summary(weight.tab1)
+
+clus.tab1 <- svydesign(id =~ 1, weights = weight.tab1$weights, data = tab1df)
+tab1_weighted = svyCreateTableOne(data = clus.tab1, strata = "use.antiviral", test = T)
+print(tab1_weighted, smd = T)
+saveRDS(weight.tab1, file = "./weight.tab1.rds")
+saveRDS(clus.tab1, file = "./svydesign.tab1.rds")
+```
+
+# IPTW table 5
+# dc.t0.rds
+# 10 May 2022: population size is correct
+
+```{r}
+colnames(dc.t0)
+tab5_df = dc.t0 %>%
+  mutate(paycode = case_when(
+    `Paycode (OPAS)` == "DGS" ~ "GS",
+     grepl("DH", `Paycode (OPAS)`) == T ~"HA",
+     grepl("EP", `Paycode (OPAS)`) == T ~"EP",
+     grepl("GAZ", `Paycode (OPAS)`) == T ~"PA",
+     grepl("HA", `Paycode (OPAS)`) == T ~"HA",
+     grepl("NE", `Paycode (OPAS)`) == T ~"NEP",
+     `Paycode (OPAS)` == "P"  ~ "PA",
+     `Paycode (OPAS)` == "PA"~ "PA",
+     grepl("RH", `Paycode (OPAS)`) == T ~"HA",
+     TRUE ~ as.character(`Paycode (EIS)`)
+  )) %>%
+  select(antiviral, FU.dead, Sex, age, age.gp, paycode, chin, dead, ami:aids) %>%
+  mutate(no.disease = ifelse(if_any(ami:aids) == 1, 0, 1),
+         no.disease = ifelse(is.na(no.disease), 0, no.disease)) %>%
+  # age >= 60 or any comorb == 1
+  filter(age >= 60 | no.disease == 0) %>%
+  select(-age, -no.disease) %>%
+  # replace NA in comorbs, factorise
+  mutate_at(vars(ami:aids), ~replace_na(., 0),
+            vars(antiviral, FU.dead, Sex, age.gp, paycode, chin, dead, ami:aids), ~as.factor(.)) 
+
+# optional
+tab5_df %>% filter_all((any_vars(is.na(.))))  
+lapply(tab5_df, function(x) unique(x))
+#optional
+
+tab5 = CreateTableOne(data = tab5_df, strata = "antiviral", test = T)
+print(tab5, smd = T)
+
+#IPTW
+col_removed = c("antiviral", "age"
+                # only 1 level, 0
+                )
+x_factors = colnames(tab5_df)
+x_factors = x_factors[! x_factors %in% col_removed]
+
+# install package "mlogit"
+function_call<-paste0("weight.tab5 <- weightit(antiviral ~ ",paste(x_factors, collapse = "+"), 
+              ", data = tab5_df, method = \"ps\", use.mlogit = F,
+              focal = \"Did not use\",
+              estimand = \"ATT\")"
+              )
+eval(parse(text = function_call))
+
+
+
+# balance of weighting
+bal.tab(weight.tab5, un = T)
+summary(weight.tab5)
+
+clus.tab5 <- svydesign(id =~ 1, weights = weight.tab5$weights, data = tab5_df)
+tab5_weighted = svyCreateTableOne(data = clus.tab5, strata = "antiviral", test = T)
+print(tab5_weighted, smd = T)
+saveRDS(weight.tab5, file = "./weight.tab5.rds")
+saveRDS(clus.tab5, file = "./svydesign.tab5.rds")
+```
+
