@@ -69,6 +69,12 @@ summary(weight.tab1)
 clus.tab1 <- svydesign(id =~ 1, weights = weight.tab1$weights, data = tab1df)
 tab1_weighted = svyCreateTableOne(data = clus.tab1, strata = "use.antiviral", test = T)
 print(tab1_weighted, smd = T)
+
+tab1_weighted_Mat <- print(tab1_weighted, quote = FALSE, noSpaces = TRUE, printToggle = FALSE, smd = T)
+tab1_weighted_Mat = as.data.frame(cbind(" " = rownames(tab1_weighted_Mat),tab1_weighted_Mat))
+## Save to a xlsx
+writexl::write_xlsx(tab1_weighted_Mat, path = "./tab1_weighted_Mat.xlsx")
+
 saveRDS(weight.tab1, file = "./weight.tab1.rds")
 saveRDS(clus.tab1, file = "./svydesign.tab1.rds")
 ```
@@ -134,6 +140,12 @@ summary(weight.tab5)
 clus.tab5 <- svydesign(id =~ 1, weights = weight.tab5$weights, data = tab5_df)
 tab5_weighted = svyCreateTableOne(data = clus.tab5, strata = "antiviral", test = T)
 print(tab5_weighted, smd = T)
+
+tab5_weighted_Mat <- print(tab5_weighted, quote = FALSE, noSpaces = TRUE, printToggle = FALSE, smd = T)
+tab5_weighted_Mat = as.data.frame(cbind(" " = rownames(tab5_weighted_Mat),tab5_weighted_Mat))
+## Save to a xlsx
+writexl::write_xlsx(tab5_weighted_Mat, path = "./tab5_weighted_Mat.xlsx")
+
 saveRDS(weight.tab5, file = "./weight.tab5.rds")
 saveRDS(clus.tab5, file = "./svydesign.tab5.rds")
 ```
